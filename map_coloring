@@ -1,0 +1,255 @@
+import sys
+import copy
+
+# class representation of map to color
+class Map():
+    def __init__(self, states, colors, matrix):
+        self.states = states # list of string states
+        self.colors = colors # list of char colors
+        self.matrix = matrix # adjacency matrix
+        self.n = len(states) # number of states [nodes]
+        self.m = len(colors) # number of colors [domain]
+
+    # returns number of constraints on a states given index
+    def findConstr(self, solution, states):
+        constraints = 0
+        for i in self.matrix[states]:
+            # only consider unassigned states
+            if i == '1' and solution[states] == -1:
+                constraints += 1
+        return constraints
+    
+    # determines if color is valid assignment
+    def isLegal(self, solution, states, color):
+        for i in range(self.n):
+            if(self.matrix[states][i] == '1' and color == solution[i]):
+                return False
+        return True
+
+# functions to update variables not in Map class
+# returns updated version of variable
+# parameters
+    # domDict: dictionary of all states mapped to valid domain colors
+    # sol: dictionary of states mapped to their solution colors, -1 if not colored
+    # history: list of expanded states
+    # states: index of states to expand
+    # color: index of color to assign
+
+def updateDom(domDict, states, color):
+    update = domDict[states]
+    update[color] = ''  # Use color index to update domain
+    return update
+
+def updateSolDict(sol, states, color):
+    update = sol
+    update[states] = color
+    return update
+
+def updHist(history, states, color):
+    update = copy.deepcopy(history)
+    update.append(states)
+    return update
+
+# functions to implement forward checking
+def addInference(mc, solution, domDict, states, colorIndex):
+    # remove color from domain of all neighboring states
+    for i in range(mc.n):
+        if(mc.matrix[states][i] == '1' and solution[i] == -1):
+            domDict[states] = updateDom(domDict, states, colorIndex)
+    # check for failure
+    for dom in domDict[states]:
+        if dom != '':
+            return (True, domDict)
+    return (False, domDict)
+
+def removeInference(mc, domDict, solution, states, color):
+    for i in range(mc.n):
+        if(mc.matrix[states][i] == '1' and solution[i] == -1):
+            domDict[i][color] = mc.colors[color]
+    return domDict
+
+# function to implement mrv heuristic
+# returns index of states to evaluate
+# parameters
+    # mc: Map instance
+    # solution: dictionary of  states mapped to their solution colors, -1 if not colored
+    # domDict: dictionary of all states mapped to valid domain colors
+def calcMRV(mc, solution, domDict):
+    # Initialize a variable to store the index of the state with the minimum remaining values
+    # ...
+    minremainingvalues = float('inf')
+    remainingvalue_index = -1
+    
+    for i in range(mc.n):
+
+        if solution[i] != -1:
+            continue
+
+        domain = domDict[i]
+
+        remainingvalue = sum(1 for dom in domain if dom != '')
+        if remainingvalue < minremainingvalues:
+            minremainingvalues = remainingvalue
+            remainingvalue_index = i
+
+    if remainingvalue_index == None:
+        return -1
+    else:
+        return remainingvalue_index
+        
+    # Initialize a variable to store the minimum number of remaining values found so far
+    # ...
+
+    # Loop through all states
+  
+        # Check if the state is unassigned (i.e., its color is -1 in the solution dictionary)
+        # ...
+
+            # Count the number of available colors for this state
+            # Hint: Iterate through the domain dictionary (domDict) for this state
+            #       and count the colors that are still available (not empty)
+            # ...
+
+            # Compare this count with the minimum number of remaining values
+            # If it's smaller, update the state index and the minimum count
+            # ...
+
+    # Return the index of the state with the minimum remaining values
+    # If no unassigned state is left, return -1
+    # ...
+
+
+# Function to calculate the least constraining value (color)
+# Returns colors sorted based on how many times they appear in the domains of neighboring states
+# Parameters
+    # mc: Map instance
+    # domDict: dictionary of all states mapped to valid domain colors
+    # solution: dictionary of states mapped to their solution colors, -1 if not colored
+    # states: index of states to expand
+def calcLCV(mc, domDict, solution, states):
+    # Initialize a dictionary to count the occurrence of each color in the neighboring states
+    # ...
+    colorCount = {}
+    # Loop through all states
+    for i in range(mc.n):
+        # Check if the state is a neighbor and is unassigned
+        if (mc.matrix[states][i] == '1' and solution[i] == -1):
+            for color in domDict[i]:
+                if color in colorCount:
+                    colorCount[color] += 1
+                else:
+                    colorCount[color] = 1
+
+    sortedColor = sorted(colorCount.keys(), key=lambda color: colorCount[color])
+    nonAdjacentColor = [color for color in mc.colors if color not in colorCount]
+
+    return sortedColor + nonAdjacentColor
+        # Hint: Use the adjacency matrix (mc.matrix) and the solution dictionary
+        # ...
+
+            # For each available color in the domain of the neighboring state,
+            # increment its count in the color count dictionary
+            # ...
+
+    # Sort and return the colors based on their occurrence count
+    # Hint: The color with the least occurrences should come first
+    #       as it is the least constraining
+    # ...
+
+# recursive backtracking function to execute map coloring
+# returns when all states have been colored
+# parameters
+    # mc: Map instance
+    # domDict: dictionary of all states mapped to valid domain colors
+    # solution: dictionary of  states mapped to their solution colors, -1 if not colored
+    # history: list of expanded states
+    # states: index of states to expand
+def coloring(mc, domDict, solution, history, states):
+    if states == -1:
+        return True  # All states are assigned
+    
+    for color in calcLCV(mc, domDict, solution, states):  # Use LCV to choose color
+        colorIndex = mc.colors.index(color)
+        if mc.isLegal(solution, states, colorIndex):
+            # remove color from domain of updated states
+            domDict[states] = updateDom(domDict, states, colorIndex)
+
+            # FORWARD CHECKING
+            fwc = addInference(mc, solution, domDict, states, colorIndex)
+            if(fwc[0]):
+                domDict = fwc[1]
+                # update solution list
+                solution = updateSolDict(solution, states, colorIndex)
+            else:
+                domDict = removeInference(mc, solution, domDict, states, colorIndex)
+
+            # update history list
+            history = updHist(history, states, colorIndex)
+
+            if(len(history) <= mc.n):
+                coloring(mc, domDict, solution, history, calcMRV(mc, solution, domDict))
+            else:
+                return True
+    return False
+
+# function to execute map coloring
+def runMapColoring(states, colors, adjMatrix):
+    # create Map
+    mc = Map(states, colors, adjMatrix)
+
+    # collections for search
+    domDict = {i: copy.deepcopy(colors) for i in range(len(states))}
+    solution = {i: -1 for i in range(len(states))}
+    history = []
+
+    # call backtracking function
+    failure = coloring(mc, domDict, solution, history, calcMRV(mc, solution, domDict))
+
+    if failure:
+        return failure
+    else:
+        # print out results
+        toPrint(mc, solution)
+        
+# output to file
+# parameters
+    # solution: list with selected colors
+def toPrint(mc, solution):   
+    print("Solution found:")
+    for c in solution:
+        print(mc.states[c] + " = " + mc.colors[solution[c]])
+    print('T = Any color (Since Tasmania is not adjacent to any other state)')
+
+# function to read information
+def main():
+    values = '6 3\n' # variable and domain number
+    states = 'NSW NT Q SA WA V\n'
+    colors = 'R G B\n'
+    adj = ['0 0 1 1 0 1\n', '0 0 1 1 1 0\n', '1 1 0 1 0 0\n', '1 1 1 0 1 1\n', '0 1 0 1 0 0 \n', '1 0 0 1 0 0']
+
+    #represent n and m
+    n = values.split()[0]
+    m = values.split()[1]
+
+    #represent states
+    states = states.split()
+
+    #represent colors
+    colors = colors.split()
+
+    #represent adjacency matrix
+    adjMatrix = []
+    tempArr = []
+    for row in adj:
+        for char in row:
+            if char == '1' or char == '0':
+                tempArr.append(char)
+        adjMatrix.append(tempArr)
+        tempArr = []
+
+    # run backtracking algorithm
+    runMapColoring(states, colors, adjMatrix)
+
+#run script
+main()
+
